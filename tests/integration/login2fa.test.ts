@@ -53,9 +53,9 @@ describe('POST /api/auth/2fa/login', () => {
     const challengeToken = primaryLogin.body.challenge_token;
     expect(challengeToken).toBeDefined();
 
-    // 2FA login step
+    // Use currentWindow + 1 so window is strictly greater than last_totp_window and within drift range
     const currentWindow = getCurrentTimeWindow();
-    const totpCode = generateTotpCode(plaintextSecret, currentWindow);
+    const totpCode = generateTotpCode(plaintextSecret, currentWindow + 1);
 
     const res = await request(app)
       .post('/api/auth/2fa/login')

@@ -124,11 +124,19 @@ export class AuthService {
     });
 
     const verificationResult = verifyTotpCode(decryptedSecret, code);
-    if (!verificationResult.valid) {
+    if (!verificationResult.valid || verificationResult.matchedWindow === null) {
       throw new UnauthorizedError('Invalid 2FA verification code.');
     }
 
-    await this.userRepo.setTotpEnabled(userId, true);
+    const recorded = await this.userRepo.verifyAndRecordTotpWindow(
+      userId,
+      verificationResult.matchedWindow,
+      { enableTotpOnSuccess: true }
+    );
+
+    if (!recorded) {
+      throw new UnauthorizedError('TOTP code has already been used.');
+    }
 
     return {
       message: '2FA successfully enabled',
@@ -167,8 +175,17 @@ export class AuthService {
     });
 
     const verificationResult = verifyTotpCode(decryptedSecret, code);
-    if (!verificationResult.valid) {
+    if (!verificationResult.valid || verificationResult.matchedWindow === null) {
       throw new UnauthorizedError('Invalid 2FA code.');
+    }
+
+    const recorded = await this.userRepo.verifyAndRecordTotpWindow(
+      user.id,
+      verificationResult.matchedWindow
+    );
+
+    if (!recorded) {
+      throw new UnauthorizedError('TOTP code has already been used.');
     }
 
     const fullAccessToken = signFullAccessToken({ id: user.id, email: user.email });
