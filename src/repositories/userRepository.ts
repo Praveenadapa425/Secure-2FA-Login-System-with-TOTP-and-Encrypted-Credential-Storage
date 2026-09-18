@@ -27,6 +27,33 @@ export class UserRepository {
     );
     return res.rows[0];
   }
+
+  async updateTotpSecret(
+    userId: string,
+    encryptedSecret: string,
+    iv: string,
+    tag: string
+  ): Promise<void> {
+    await pool.query(
+      `UPDATE users
+       SET totp_secret_encrypted = $1,
+           totp_iv = $2,
+           totp_tag = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [encryptedSecret, iv, tag, userId]
+    );
+  }
+
+  async setTotpEnabled(userId: string, enabled: boolean): Promise<void> {
+    await pool.query(
+      `UPDATE users
+       SET totp_enabled = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [enabled, userId]
+    );
+  }
 }
 
 export const userRepository = new UserRepository();

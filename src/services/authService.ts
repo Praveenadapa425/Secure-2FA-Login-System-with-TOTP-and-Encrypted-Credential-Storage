@@ -3,10 +3,17 @@ import { userRepository, UserRepository } from '../repositories/userRepository';
 import { UserResponse } from '../models/user';
 import { BadRequestError, ConflictError, UnauthorizedError } from '../utils/errors';
 import { signFullAccessToken, signChallengeToken } from '../utils/jwt';
+import { generateTotpSecret, generateOtpAuthUri } from '../totp/totp';
+import { encrypt } from '../crypto/encryption';
 
 export type LoginResult =
   | { token: string }
   | { requires_2fa: true; challenge_token: string };
+
+export interface Setup2FAResponse {
+  secret: string;
+  uri: string;
+}
 
 export class AuthService {
   constructor(private userRepo: UserRepository = userRepository) {}
@@ -73,6 +80,30 @@ export class AuthService {
     const fullAccessToken = signFullAccessToken({ id: user.id, email: user.email });
     return {
       token: fullAccessToken,
+    };
+  }
+
+  async setup2FA(userId: string): Promise<Setup2FAResponse> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new UnauthorizedError('User not found.');
+    }
+
+    const base32Secret = generateTotpSecret(20);
+    const uri = generateOtpAuthUri(base32Secret, user.email, 'YourAppName');
+
+    const encrypted = encrypt(base32Secret);
+
+    await this.userRepo.updateTotpSecret(
+      user.id,
+      encrypted.ciphertext,
+      encrypted.iv,
+      encrypted.authTag
+    );
+
+    return {
+      secret: base32Secret,
+      uri,
     };
   }
 }
