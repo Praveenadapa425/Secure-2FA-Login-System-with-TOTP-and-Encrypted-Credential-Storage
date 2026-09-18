@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import { userRepository, UserRepository } from '../repositories/userRepository';
 import { UserResponse } from '../models/user';
 import { BadRequestError, ConflictError, UnauthorizedError } from '../utils/errors';
-import { signFullAccessToken, signChallengeToken } from '../utils/jwt';
+import { signFullAccessToken, signChallengeToken, verifyToken } from '../utils/jwt';
 import { generateTotpSecret, generateOtpAuthUri, verifyTotpCode } from '../totp/totp';
 import { encrypt, decrypt } from '../crypto/encryption';
 
@@ -133,6 +133,46 @@ export class AuthService {
     return {
       message: '2FA successfully enabled',
     };
+  }
+
+  async loginWith2FA(challengeToken: string, code: string): Promise<{ token: string }> {
+    if (!challengeToken || typeof challengeToken !== 'string') {
+      throw new UnauthorizedError('Challenge token is required.');
+    }
+
+    if (!code || typeof code !== 'string') {
+      throw new UnauthorizedError('TOTP code is required.');
+    }
+
+    let payload;
+    try {
+      payload = verifyToken(challengeToken);
+    } catch (err) {
+      throw new UnauthorizedError('Invalid or expired challenge token.');
+    }
+
+    if (payload.scope !== '2fa_challenge') {
+      throw new UnauthorizedError('Invalid challenge token scope.');
+    }
+
+    const user = await this.userRepo.findById(payload.sub);
+    if (!user || !user.totp_enabled || !user.totp_secret_encrypted || !user.totp_iv || !user.totp_tag) {
+      throw new UnauthorizedError('2FA is not enabled or provisioned for this user.');
+    }
+
+    const decryptedSecret = decrypt({
+      iv: user.totp_iv,
+      ciphertext: user.totp_secret_encrypted,
+      authTag: user.totp_tag,
+    });
+
+    const verificationResult = verifyTotpCode(decryptedSecret, code);
+    if (!verificationResult.valid) {
+      throw new UnauthorizedError('Invalid 2FA code.');
+    }
+
+    const fullAccessToken = signFullAccessToken({ id: user.id, email: user.email });
+    return { token: fullAccessToken };
   }
 }
 

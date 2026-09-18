@@ -48,6 +48,16 @@ export class AuthController {
       next(error);
     }
   }
+
+  async login2FA(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { challenge_token, code } = req.body;
+      const result = await authService.loginWith2FA(challenge_token, code);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();
