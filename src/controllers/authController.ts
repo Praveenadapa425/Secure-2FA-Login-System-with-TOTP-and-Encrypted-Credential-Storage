@@ -35,6 +35,19 @@ export class AuthController {
       next(error);
     }
   }
+
+  async verify2FA(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user || !req.user.sub) {
+        throw new UnauthorizedError('Authentication required.');
+      }
+      const { code } = req.body;
+      const result = await authService.verifyInitial2FA(req.user.sub, code);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();

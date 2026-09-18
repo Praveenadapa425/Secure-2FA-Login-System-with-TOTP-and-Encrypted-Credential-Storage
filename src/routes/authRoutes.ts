@@ -9,5 +9,8 @@ router.post('/login', (req, res, next) => authController.login(req, res, next));
 router.post('/2fa/setup', authenticateFullAccess, (req, res, next) =>
   authController.setup2FA(req as AuthenticatedRequest, res, next)
 );
+router.post('/2fa/verify', authenticateFullAccess, (req, res, next) =>
+  authController.verify2FA(req as AuthenticatedRequest, res, next)
+);
 
 export default router;

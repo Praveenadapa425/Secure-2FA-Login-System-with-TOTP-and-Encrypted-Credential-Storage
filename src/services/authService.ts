@@ -3,8 +3,8 @@ import { userRepository, UserRepository } from '../repositories/userRepository';
 import { UserResponse } from '../models/user';
 import { BadRequestError, ConflictError, UnauthorizedError } from '../utils/errors';
 import { signFullAccessToken, signChallengeToken } from '../utils/jwt';
-import { generateTotpSecret, generateOtpAuthUri } from '../totp/totp';
-import { encrypt } from '../crypto/encryption';
+import { generateTotpSecret, generateOtpAuthUri, verifyTotpCode } from '../totp/totp';
+import { encrypt, decrypt } from '../crypto/encryption';
 
 export type LoginResult =
   | { token: string }
@@ -104,6 +104,34 @@ export class AuthService {
     return {
       secret: base32Secret,
       uri,
+    };
+  }
+
+  async verifyInitial2FA(userId: string, code: string): Promise<{ message: string }> {
+    if (!code || typeof code !== 'string') {
+      throw new BadRequestError('TOTP code is required.');
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user || !user.totp_secret_encrypted || !user.totp_iv || !user.totp_tag) {
+      throw new BadRequestError('2FA has not been provisioned for this user.');
+    }
+
+    const decryptedSecret = decrypt({
+      iv: user.totp_iv,
+      ciphertext: user.totp_secret_encrypted,
+      authTag: user.totp_tag,
+    });
+
+    const verificationResult = verifyTotpCode(decryptedSecret, code);
+    if (!verificationResult.valid) {
+      throw new UnauthorizedError('Invalid 2FA verification code.');
+    }
+
+    await this.userRepo.setTotpEnabled(userId, true);
+
+    return {
+      message: '2FA successfully enabled',
     };
   }
 }
