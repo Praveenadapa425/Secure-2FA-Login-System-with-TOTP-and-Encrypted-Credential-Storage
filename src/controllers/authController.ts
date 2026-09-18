@@ -11,6 +11,16 @@ export class AuthController {
       next(error);
     }
   }
+
+  async login(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, password } = req.body;
+      const result = await authService.loginUser(email, password);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();

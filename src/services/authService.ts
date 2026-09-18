@@ -1,7 +1,12 @@
 import bcrypt from 'bcrypt';
 import { userRepository, UserRepository } from '../repositories/userRepository';
 import { UserResponse } from '../models/user';
-import { BadRequestError, ConflictError } from '../utils/errors';
+import { BadRequestError, ConflictError, UnauthorizedError } from '../utils/errors';
+import { signFullAccessToken, signChallengeToken } from '../utils/jwt';
+
+export type LoginResult =
+  | { token: string }
+  | { requires_2fa: true; challenge_token: string };
 
 export class AuthService {
   constructor(private userRepo: UserRepository = userRepository) {}
@@ -38,6 +43,36 @@ export class AuthService {
     return {
       id: newUser.id,
       email: newUser.email,
+    };
+  }
+
+  async loginUser(email: string, password: string): Promise<LoginResult> {
+    if (!email || typeof email !== 'string' || !password || typeof password !== 'string') {
+      throw new UnauthorizedError('Invalid credentials.');
+    }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const user = await this.userRepo.findByEmail(trimmedEmail);
+    if (!user) {
+      throw new UnauthorizedError('Invalid credentials.');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedError('Invalid credentials.');
+    }
+
+    if (user.totp_enabled) {
+      const challengeToken = signChallengeToken({ id: user.id, email: user.email });
+      return {
+        requires_2fa: true,
+        challenge_token: challengeToken,
+      };
+    }
+
+    const fullAccessToken = signFullAccessToken({ id: user.id, email: user.email });
+    return {
+      token: fullAccessToken,
     };
   }
 }
