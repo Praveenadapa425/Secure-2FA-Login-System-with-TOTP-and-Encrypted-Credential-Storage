@@ -3,7 +3,25 @@ import path from 'path';
 import { pool } from './pool';
 
 export async function runMigrations(): Promise<void> {
-  const client = await pool.connect();
+  let retries = 5;
+  let client;
+
+  while (retries > 0) {
+    try {
+      client = await pool.connect();
+      break;
+    } catch (err) {
+      retries -= 1;
+      console.log(`Database connection attempt failed (${retries} retries left):`, (err as Error).message);
+      if (retries === 0) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (!client) {
+    throw new Error('Could not acquire database client for migrations.');
+  }
+
   try {
     // Create migrations table if it does not exist
     await client.query(`
